@@ -4,10 +4,11 @@ var _ = require('lodash');
 var multer = require('multer');
 var path = require('path');
 var fs = require('fs');
+var settings = require('../config/settings');
 
 
 // SET STORAGE
-const storage = multer.diskStorage({
+let storage = multer.diskStorage({
     destination: function (req, file, cb) {
         if (req.body && req.body.key) {
             const pathDirname = path.dirname(req.body.key);
@@ -28,6 +29,41 @@ const storage = multer.diskStorage({
     }
 });
 
+if (settings.storageEngine === 'aws-s3') {
+    var multerS3 = require('multer-s3');
+    var aws = require('aws-sdk');
+
+    storage = multerS3({
+        s3: new aws.S3({}),
+        bucket: settings.S3BucketName,
+        contentType: function (req, file, cb) {
+            const mediaType = file.mimetype || req.body['Content-Type'];
+            if (mediaType)
+                cb(null, mediaType);
+            else
+                multerS3.AUTO_CONTENT_TYPE(req, file, cb);
+        },
+        metadata: function (req, file, cb) {
+            cb(null, { fieldName: file.fieldname });
+        },
+        key: function (req, file, cb) {
+            let filename = req.body.key;
+
+            if (!filename) {
+                filename = Date.now().toString();
+                if (file.mimetype === 'image/jpg' || file.mimetype === 'image/pjpg')
+                    filename += '.jpg';
+                else if (file.mimetype === 'image/png')
+                    filename += '.png';
+                else if (file.mimetype === 'image/gif')
+                    filename += '.gif';
+            }
+
+            cb(null, filename);
+        },
+        acl: 'public-read'
+    });
+}
 
 const limits = {
     files: 1, // allow only 1 file per request
@@ -57,24 +93,30 @@ const upload = multer({
 router.post('/', upload.single(process.env.AVATAR_FIELD), (req, res, next) => {
 
     var files = [];
-    var file = req.file.filename;
-    var matches = file.match(/^(.+?)_.+?\.(.+)$/i);
 
-    if (matches) {
-        files = _.map(['lg', 'md', 'sm'], function (size) {
-            return matches[1] + '_' + size + '.' + matches[2];
-        });
-    } else {
-        files = [file];
+    if (settings.storageEngine === 'aws-s3') {
+        files = [req.file.location];
     }
+    else {
+        var file = req.file.filename || req.file.key;
+        var matches = file.match(/^(.+?)_.+?\.(.+)$/i);
 
-    files = _.map(files, function (file) {
-        var port = req.app.get('port');
-        var base = req.protocol + '://' + req.hostname + (port ? ':' + port : '');
-        var url = file.replace(/[\\\/]+/g, '/').replace(/^[\/]+/g, '');
+        if (matches) {
+            files = _.map(['lg', 'md', 'sm'], function (size) {
+                return matches[1] + '_' + size + '.' + matches[2];
+            });
+        } else {
+            files = [file];
+        }
 
-        return (req.file.storage == 'local' ? base : '') + '/' + url;
-    });
+        files = _.map(files, function (file) {
+            var port = req.app.get('port');
+            var base = req.protocol + '://' + req.hostname + (port ? ':' + port : '');
+            var url = file.replace(/[\\\/]+/g, '/').replace(/^[\/]+/g, '');
+
+            return (req.file.storage === 'local' ? base : '') + '/' + url;
+        });
+    }
 
     res.json({
         images: files
