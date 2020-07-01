@@ -116,19 +116,20 @@ router.post('/', upload.single(process.env.AVATAR_FIELD), (req, res, next) => {
         else
             file = req.file.fieldname + '-' + Date.now() + path.extname(req.file.originalname);
 
-        files = [file];
+        //files = [file];
 
-        files = _.map(files, function (file) {
-            var port = req.app.get('port');
-            var base = req.protocol + '://' + req.hostname + (port ? ':' + port : '');
-            var url = file.replace(/[\\\/]+/g, '/').replace(/^[\/]+/g, '');
+        //files = _.map(files, function (file) {
+        //    var port = req.app.get('port');
+        //    var base = req.protocol + '://' + req.hostname + (port ? ':' + port : '');
+        //    var url = file.replace(/[\\\/]+/g, '/').replace(/^[\/]+/g, '');
 
-            return base + '/' + url;
-        });
+        //    return base + '/' + url;
+        //});
     }
 
     res.json({
-        images: files
+        images: files,
+        image: file
     });
 
 });
