@@ -7,7 +7,9 @@ var fs = require('fs');
 var settings = require('../config/settings');
 
 
-// SET STORAGE
+// SET STORAGE engine
+
+// Local system file storage
 let storage = multer.diskStorage({
     destination: function (req, file, cb) {
         if (req.body && req.body.key) {
@@ -29,6 +31,7 @@ let storage = multer.diskStorage({
     }
 });
 
+// Amazon S3 storage
 if (settings.storageEngine === 'aws-s3') {
     var multerS3 = require('multer-s3');
     var aws = require('aws-sdk');
@@ -65,6 +68,9 @@ if (settings.storageEngine === 'aws-s3') {
     });
 }
 
+// If needed, a MongoDB GridFS storage is also available (https://www.npmjs.com/package/multer-gridfs-storage)
+
+
 const limits = {
     files: 1, // allow only 1 file per request
     fileSize: 5 * 1024 * 1024 // 5 MB (max file size)
@@ -99,22 +105,25 @@ router.post('/', upload.single(process.env.AVATAR_FIELD), (req, res, next) => {
     }
     else {
         var file = req.file.filename || req.file.key;
-        var matches = file.match(/^(.+?)_.+?\.(.+)$/i);
+        //var matches = file.match(/^(.+?)_.+?\.(.+)$/i);
 
-        if (matches) {
-            files = _.map(['lg', 'md', 'sm'], function (size) {
-                return matches[1] + '_' + size + '.' + matches[2];
-            });
-        } else {
-            files = [file];
+        if (req.body && req.body.key) {
+            const pathDirname = path.dirname(req.body.key);
+            const filename = path.basename(req.body.key);
+
+            file = path.join('images', pathDirname, filename);
         }
+        else
+            file = req.file.fieldname + '-' + Date.now() + path.extname(req.file.originalname);
+
+        files = [file];
 
         files = _.map(files, function (file) {
             var port = req.app.get('port');
             var base = req.protocol + '://' + req.hostname + (port ? ':' + port : '');
             var url = file.replace(/[\\\/]+/g, '/').replace(/^[\/]+/g, '');
 
-            return (req.file.storage === 'local' ? base : '') + '/' + url;
+            return base + '/' + url;
         });
     }
 
